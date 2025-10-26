@@ -101,7 +101,7 @@ stages:
             }
           ]
         startupCommand: 'gunicorn --bind=0.0.0.0 --timeout 600 app:app'
-
+        
     # Deploy a Azure Web App
     - task: AzureWebApp@1
       displayName: 'Deploy to Azure Web App'
