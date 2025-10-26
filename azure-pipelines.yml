@@ -97,7 +97,7 @@ stages:
             {
               "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
               "value": "true",
-              "slotSetting": true
+              "slotSetting": false
             }
           ]
         startupCommand: 'gunicorn --bind=0.0.0.0 --timeout 600 app:app'
