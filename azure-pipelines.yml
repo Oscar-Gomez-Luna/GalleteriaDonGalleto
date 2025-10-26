@@ -3,7 +3,7 @@ trigger:
 
 variables:
   azureServiceConnectionId: '6d7c31c8-5ec3-475d-afa1-4e79dc15f591'
-  webAppName: 'don-galleto-galleteria'
+  webAppName: 'don-galleto'
   resourceGroup: 'bases-de-datos'
   projectRoot: $(System.DefaultWorkingDirectory)
 
