@@ -1,0 +1,114 @@
+trigger:
+- master
+
+variables:
+  azureServiceConnectionId: '6d7c31c8-5ec3-475d-afa1-4e79dc15f591'
+  webAppName: 'galleteria-don-galleto'
+  resourceGroup: 'bases-de-datos'
+  projectRoot: $(System.DefaultWorkingDirectory)
+
+stages:
+- stage: Build
+  displayName: 'Build Stage'
+  jobs:
+  - job: BuildJob
+    displayName: 'Build on self-hosted Windows agent'
+    pool:
+      name: 'OscarAgent'
+    steps:
+    - script: |
+        python --version
+        pip --version
+      displayName: 'Check existing Python installation'
+
+    - script: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+      workingDirectory: $(projectRoot)
+      displayName: 'Install Python dependencies'
+
+    - task: ArchiveFiles@2
+      displayName: 'Archive project files'
+      inputs:
+        rootFolderOrFile: '$(projectRoot)'
+        includeRootFolder: false
+        archiveType: zip
+        archiveFile: '$(Build.ArtifactStagingDirectory)/drop.zip'
+        replaceExistingArchive: true
+
+    # Verificar contenido del ZIP
+    - script: |
+        echo "=== Contenido del archivo ZIP ==="
+        powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::OpenRead('$(Build.ArtifactStagingDirectory)/drop.zip').Entries | Select-Object -First 20 FullName | Format-Table"
+      displayName: 'Verify ZIP contents'
+
+    - publish: '$(Build.ArtifactStagingDirectory)/drop.zip'
+      artifact: drop
+      displayName: 'Publish deployment package'
+
+- stage: Deploy
+  displayName: 'Deploy Web App'
+  dependsOn: Build
+  condition: succeeded()
+  jobs:
+  - job: DeployJob
+    displayName: 'Deploy to Azure Web App Linux'
+    pool:
+      name: 'OscarAgent'
+    steps:
+    - download: current
+      artifact: drop
+      displayName: 'Download build artifacts'
+
+    # Habilitar logs de aplicación PRIMERO
+    - task: AzureCLI@2
+      displayName: 'Enable Application Logging'
+      inputs:
+        azureSubscription: '$(azureServiceConnectionId)'
+        scriptType: 'ps'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az webapp log config `
+            --name $(webAppName) `
+            --resource-group $(resourceGroup) `
+            --application-logging filesystem `
+            --level verbose `
+            --docker-container-logging filesystem
+
+    # Configurar variables de entorno y startup command
+    - task: AzureAppServiceSettings@1
+      displayName: 'Configure App Settings and Startup Command'
+      inputs:
+        azureSubscription: '$(azureServiceConnectionId)'
+        appName: '$(webAppName)'
+        resourceGroupName: '$(resourceGroup)'
+        appSettings: |
+          [
+            {
+              "name": "DATABASE_URL",
+              "value": "$(DATABASE_URL)",
+              "slotSetting": false
+            },
+            {
+              "name": "SECRET_KEY",
+              "value": "$(SECRET_KEY)",
+              "slotSetting": false
+            },
+            {
+              "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
+              "value": "false",
+              "slotSetting": false
+            }
+          ]
+        startupCommand: 'gunicorn --bind=0.0.0.0 --timeout 600 app:app'
+
+    # Deploy a Azure Web App
+    - task: AzureWebApp@1
+      displayName: 'Deploy to Azure Web App'
+      inputs:
+        azureSubscription: '$(azureServiceConnectionId)'
+        appType: 'webAppLinux'
+        appName: '$(webAppName)'
+        package: '$(Pipeline.Workspace)/drop/drop.zip'
+        deploymentMethod: 'zipDeploy'
+        runtimeStack: 'PYTHON|3.10'
