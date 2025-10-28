@@ -3,10 +3,13 @@ trigger:
 
 variables:
   azureServiceConnectionId: '6d7c31c8-5ec3-475d-afa1-4e79dc15f591'
-  webAppName: 'galleteria-don-galleto'
+  webAppName: 'don-galleto'
   resourceGroup: 'bases-de-datos'
   projectRoot: $(System.DefaultWorkingDirectory)
 
+# ===============================================================
+# Etapa de Build
+# ===============================================================
 stages:
 - stage: Build
   displayName: 'Build Stage'
@@ -46,9 +49,85 @@ stages:
       artifact: drop
       displayName: 'Publish deployment package'
 
+# ===============================================================
+# Etapa de Test
+# ===============================================================
+- stage: Test
+  displayName: 'Run Automated Tests'
+  dependsOn: Build
+  condition: succeeded()
+  jobs:
+  - job: RunTests
+    displayName: 'Execute Tests and Generate Reports'
+    pool:
+      name: 'OscarAgent'
+    
+    steps:
+    # 1. Verificar Python
+    - script: |
+        python --version
+        pip --version
+      displayName: 'Check Python installation'
+
+    # 2. Instalar dependencias
+    - script: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov unittest-xml-reporting
+      workingDirectory: $(projectRoot)
+      displayName: 'Install dependencies'
+
+    # 3. Ejecutar pruebas
+    - script: |
+        echo "===================================================================="
+        echo "🚀 INICIANDO EJECUCIÓN DE PRUEBAS AUTOMÁTICAS"
+        echo "===================================================================="
+        echo "📅 Timestamp: $(date)"
+        echo "🌿 Branch: $(Build.SourceBranch)"
+        echo "🔑 Commit: $(Build.SourceVersion)"
+        echo "👤 Ejecutado por: $(Build.RequestedFor)"
+        echo "🆔 Build ID: $(Build.BuildId)"
+        echo "===================================================================="
+        
+        python -m pytest tests/ -v --cov=./ --cov-report=xml:coverage.xml --cov-report=html:coverage_html --junitxml=test-results.xml
+      displayName: 'Run Tests with Coverage and Metrics'
+      env:
+        DATABASE_URL: $(DATABASE_URL)
+        SECRET_KEY: $(SECRET_KEY)
+
+    # 4. Publicar resultados
+    - task: PublishTestResults@2
+      displayName: 'Publish Test Results to Azure'
+      inputs:
+        testResultsFormat: 'JUnit'
+        testResultsFiles: 'test-results.xml'
+        testRunTitle: 'Don Galleto - Test Results'
+        mergeTestResults: false
+        failTaskOnFailedTests: true
+
+    # 5. Publicar cobertura
+    - task: PublishCodeCoverageResults@1
+      displayName: 'Publish Code Coverage Report'
+      inputs:
+        codeCoverageTool: 'Cobertura'
+        summaryFileLocation: '$(projectRoot)/coverage.xml'
+        reportDirectory: '$(projectRoot)/coverage_html'
+
+    # 6. Guardar artefactos
+    - publish: '$(projectRoot)/test-results.xml'
+      artifact: test-results
+      displayName: 'Publish Test Results XML'
+
+    - publish: '$(projectRoot)/coverage_html'
+      artifact: coverage-report
+      displayName: 'Publish HTML Coverage Report'
+
+# ===============================================================
+# Etapa de Deploy
+# ===============================================================
 - stage: Deploy
   displayName: 'Deploy Web App'
-  dependsOn: Build
+  dependsOn: Test
   condition: succeeded()
   jobs:
   - job: DeployJob
@@ -60,7 +139,7 @@ stages:
       artifact: drop
       displayName: 'Download build artifacts'
 
-    # Habilitar logs de aplicación PRIMERO
+    # Habilitar logs de aplicación
     - task: AzureCLI@2
       displayName: 'Enable Application Logging'
       inputs:
@@ -75,7 +154,7 @@ stages:
             --level verbose `
             --docker-container-logging filesystem
 
-    # Configurar variables de entorno y startup command
+    # Configurar variables de entorno y comando de inicio
     - task: AzureAppServiceSettings@1
       displayName: 'Configure App Settings and Startup Command'
       inputs:
@@ -96,13 +175,13 @@ stages:
             },
             {
               "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
-              "value": "false",
+              "value": "true",
               "slotSetting": false
             }
           ]
         startupCommand: 'gunicorn --bind=0.0.0.0 --timeout 600 app:app'
-
-    # Deploy a Azure Web App
+        
+    # Despliegue a Azure Web App
     - task: AzureWebApp@1
       displayName: 'Deploy to Azure Web App'
       inputs:
