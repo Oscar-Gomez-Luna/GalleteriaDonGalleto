@@ -22,6 +22,7 @@ def app():
         db.create_all()
         yield flask_app
         db.session.remove()
+        db.drop_all()
 
 @pytest.fixture
 def client(app):
