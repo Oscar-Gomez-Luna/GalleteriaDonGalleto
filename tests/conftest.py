@@ -2,27 +2,33 @@ import pytest
 import os
 import sys
 from datetime import datetime, date
+import tempfile
 
 # Agregar el directorio raíz al path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-@pytest.fixture(scope='function')
+@pytest.fixture(scope='session')
 def app():
-    """Fixture de aplicación Flask para pruebas"""
+    """Fixture de aplicación Flask para pruebas - VERSIÓN MEJORADA"""
     from app import app as flask_app
     from extensions import db
     
+    # Crear archivo temporal para la base de datos de pruebas
+    db_fd, db_path = tempfile.mkstemp()
+    
     # Configuración para testing
     flask_app.config['TESTING'] = True
-    flask_app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
+    flask_app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
     flask_app.config['SECRET_KEY'] = 'test-secret-key'
     flask_app.config['WTF_CSRF_ENABLED'] = False
     
     with flask_app.app_context():
         db.create_all()
         yield flask_app
-        # ✅ NO hacer db.drop_all() - la base de datos en memoria se destruye automáticamente
-        db.session.remove()  # Solo remover la sesión
+        # Cerrar y eliminar archivo temporal
+        db.session.close()
+        os.close(db_fd)
+        os.unlink(db_path)
 
 @pytest.fixture(scope='function')
 def client(app):
@@ -33,7 +39,14 @@ def client(app):
 def db_session(app):
     """Sesión de base de datos para pruebas"""
     from extensions import db
-    return db.session
+    session = db.session
+    # Limpiar datos entre tests sin borrar tablas
+    for table in reversed(db.metadata.sorted_tables):
+        session.execute(table.delete())
+    session.commit()
+    yield session
+    # Rollback para limpiar cualquier cambio no commitado
+    session.rollback()
 
 @pytest.fixture(scope='function')
 def sample_persona(db_session):
