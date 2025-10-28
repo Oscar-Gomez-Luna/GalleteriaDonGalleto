@@ -122,7 +122,7 @@ stages:
       artifact: drop
       displayName: 'Download build artifacts'
 
-    # Habilitar logs de aplicación
+    # ✅ CORREGIDO: Script en una sola línea para PowerShell
     - task: AzureCLI@2
       displayName: 'Enable Application Logging'
       inputs:
@@ -130,14 +130,9 @@ stages:
         scriptType: 'ps'
         scriptLocation: 'inlineScript'
         inlineScript: |
-          az webapp log config `
-          --name $(webAppName) `
-          --resource-group $(resourceGroup) `
-          --application-logging filesystem `
-          --level verbose `
-          --docker-container-logging filesystem
+          az webapp log config --name $(webAppName) --resource-group $(resourceGroup) --application-logging filesystem --level verbose --docker-container-logging filesystem
 
-    # Instalar wkhtmltopdf en la Web App (Linux)
+    # ✅ CORREGIDO: Instalar wkhtmltopdf usando comando de Azure
     - task: AzureCLI@2
       displayName: 'Install wkhtmltopdf on Web App'
       inputs:
@@ -146,10 +141,10 @@ stages:
         scriptLocation: 'inlineScript'
         inlineScript: |
           echo "=== Installing wkhtmltopdf ==="
-          apt-get update
-          apt-get install -y wkhtmltopdf
+          az webapp config set --name $(webAppName) --resource-group $(resourceGroup) --linux-fx-version "PYTHON|3.10"
+          az webapp ssh --name $(webAppName) --resource-group $(resourceGroup) --command "apt-get update && apt-get install -y wkhtmltopdf"
 
-    # Configurar variables de entorno y comando de inicio
+    # ✅ CORREGIDO: Configuración mejorada
     - task: AzureAppServiceSettings@1
       displayName: 'Configure App Settings and Startup Command'
       inputs:
@@ -164,7 +159,7 @@ stages:
               "slotSetting": false
             },
             {
-              "name": "SECRET_KEY",
+              "name": "SECRET_KEY", 
               "value": "$(SECRET_KEY)",
               "slotSetting": false
             },
@@ -172,9 +167,14 @@ stages:
               "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
               "value": "true",
               "slotSetting": false
+            },
+            {
+              "name": "WEBSITES_PORT",
+              "value": "8000",
+              "slotSetting": false
             }
           ]
-        startupCommand: 'gunicorn --bind=0.0.0.0 --timeout 600 app:app'
+        startupCommand: 'gunicorn --bind=0.0.0.0:8000 --timeout 600 app:app'
 
     # Despliegue a Azure Web App
     - task: AzureWebApp@1
