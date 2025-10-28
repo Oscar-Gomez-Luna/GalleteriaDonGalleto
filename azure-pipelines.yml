@@ -122,31 +122,21 @@ stages:
       artifact: drop
       displayName: 'Download build artifacts'
 
-    # ✅ CORREGIDO: Script en una sola línea para PowerShell
+    # Habilitar logs - CORREGIDO: una línea
     - task: AzureCLI@2
       displayName: 'Enable Application Logging'
       inputs:
         azureSubscription: '$(azureServiceConnectionId)'
         scriptType: 'ps'
         scriptLocation: 'inlineScript'
-        inlineScript: |
-          az webapp log config --name $(webAppName) --resource-group $(resourceGroup) --application-logging filesystem --level verbose --docker-container-logging filesystem
+        inlineScript: 'az webapp log config --name $(webAppName) --resource-group $(resourceGroup) --application-logging filesystem --level verbose --docker-container-logging filesystem'
 
-    # ✅ CORREGIDO: Instalar wkhtmltopdf usando comando de Azure
-    - task: AzureCLI@2
-      displayName: 'Install wkhtmltopdf on Web App'
-      inputs:
-        azureSubscription: '$(azureServiceConnectionId)'
-        scriptType: 'bash'
-        scriptLocation: 'inlineScript'
-        inlineScript: |
-          echo "=== Installing wkhtmltopdf ==="
-          az webapp config set --name $(webAppName) --resource-group $(resourceGroup) --linux-fx-version "PYTHON|3.10"
-          az webapp ssh --name $(webAppName) --resource-group $(resourceGroup) --command "apt-get update && apt-get install -y wkhtmltopdf"
+    # ✅ ELIMINADA: La tarea problemática de instalación en el agente
+    # En su lugar, instalar wkhtmltopdf en el Web App usando startup command
 
-    # ✅ CORREGIDO: Configuración mejorada
+    # Configurar App Service con instalación de wkhtmltopdf
     - task: AzureAppServiceSettings@1
-      displayName: 'Configure App Settings and Startup Command'
+      displayName: 'Configure App Settings with wkhtmltopdf'
       inputs:
         azureSubscription: '$(azureServiceConnectionId)'
         appName: '$(webAppName)'
@@ -159,13 +149,8 @@ stages:
               "slotSetting": false
             },
             {
-              "name": "SECRET_KEY", 
-              "value": "$(SECRET_KEY)",
-              "slotSetting": false
-            },
-            {
-              "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
-              "value": "true",
+              "name": "SECRET_KEY",
+              "value": "$(SECRET_KEY)", 
               "slotSetting": false
             },
             {
@@ -174,9 +159,10 @@ stages:
               "slotSetting": false
             }
           ]
-        startupCommand: 'gunicorn --bind=0.0.0.0:8000 --timeout 600 app:app'
+        # Startup command que instala wkhtmltopdf y luego inicia la app
+        startupCommand: 'apt-get update && apt-get install -y wkhtmltopdf && gunicorn --bind=0.0.0.0:8000 --timeout 600 app:app'
 
-    # Despliegue a Azure Web App
+    # Despliegue
     - task: AzureWebApp@1
       displayName: 'Deploy to Azure Web App'
       inputs:
