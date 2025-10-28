@@ -130,12 +130,12 @@ stages:
         scriptType: 'ps'
         scriptLocation: 'inlineScript'
         inlineScript: |
-          az webapp log config ` 
-            --name $(webAppName) `
-            --resource-group $(resourceGroup) `
-            --application-logging filesystem `
-            --level verbose `
-            --docker-container-logging filesystem
+          az webapp log config `
+          --name $(webAppName) `
+          --resource-group $(resourceGroup) `
+          --application-logging filesystem `
+          --level verbose `
+          --docker-container-logging filesystem
 
     # Instalar wkhtmltopdf en la Web App (Linux)
     - task: AzureCLI@2
