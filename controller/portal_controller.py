@@ -7,6 +7,7 @@ from model.detalle_venta_orden import DetalleVentaOrden
 from model.usuario import db, Usuario
 from model.cliente import db, Cliente
 from model.persona import db, Persona
+from model.solicitud_produccion import SolicitudProduccion
 
 portal_cliente_bp = Blueprint('portal_cliente', __name__, 
                             url_prefix='/portal',
@@ -86,13 +87,15 @@ def agregar_al_carrito(cliente_id):
             flash(f'No hay suficiente existencia. Disponibles: {galleta.existencia}', 'error')
             return redirect(url_for('portal_cliente.portal_cliente'))
         
+        tipo = TipoGalleta.query.get(galleta.tipo_galleta_id)
+
         item = {
             'galleta_id': galleta.id_galleta,
             'nombre': galleta.galleta,
-            'tipo': galleta.tipo_galleta_rel.nombre,
-            'precio': float(galleta.tipo_galleta_rel.costo),
+            'tipo': tipo.nombre,
+            'precio': float(tipo.costo),
             'cantidad': cantidad,
-            'subtotal': float(galleta.tipo_galleta_rel.costo) * cantidad
+            'subtotal': float(tipo.costo) * cantidad
         }
         
         # Buscar si ya existe el item en el carrito
@@ -214,9 +217,9 @@ def confirmar_pedido():
         )
         
         db.session.add(nueva_orden)
-        db.session.flush()
+        db.session.flush()  # Necesario para obtener id_orden antes de commit
         
-        # Crear los detalles de la orden
+        # Crear los detalles de la orden y las solicitudes de producción
         for item in session['carritos'][str(cliente_id)]:
             detalle = DetalleVentaOrden(
                 galletas_id=item['galleta_id'],
@@ -225,8 +228,19 @@ def confirmar_pedido():
                 orden_id=nueva_orden.id_orden
             )
             db.session.add(detalle)
+            db.session.flush()  # Necesario para obtener id_detalleVentaOrden
+            
+            # Crear la solicitud de producción automáticamente
+            solicitud = SolicitudProduccion(
+                detalleorden_id=detalle.id_detalleVentaOrden,
+                fechaCaducidad=datetime.now() + timedelta(days=7),  # ejemplo: caduca en 7 días
+                estatus=1
+            )
+            db.session.add(solicitud)
         
         db.session.commit()
+        
+        # Limpiar carrito
         session['carritos'][str(cliente_id)] = []
         session.modified = True
         
@@ -237,6 +251,7 @@ def confirmar_pedido():
         db.session.rollback()
         flash(f'Error al confirmar el pedido: {str(e)}', 'error')
         return redirect(url_for('portal_cliente.portal_cliente'))
+
     
 @portal_cliente_bp.route('/mis-pedidos')
 def mis_pedidos():
