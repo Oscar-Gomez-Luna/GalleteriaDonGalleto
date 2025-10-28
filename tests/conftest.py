@@ -6,7 +6,7 @@ from datetime import datetime, date
 # Agregar el directorio raíz al path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-@pytest.fixture
+@pytest.fixture(scope='function')
 def app():
     """Fixture de aplicación Flask para pruebas"""
     from app import app as flask_app
@@ -21,21 +21,21 @@ def app():
     with flask_app.app_context():
         db.create_all()
         yield flask_app
-        db.session.remove()
-        db.drop_all()
+        # ✅ NO hacer db.drop_all() - la base de datos en memoria se destruye automáticamente
+        db.session.remove()  # Solo remover la sesión
 
-@pytest.fixture
+@pytest.fixture(scope='function')
 def client(app):
     """Cliente de prueba para hacer requests"""
     return app.test_client()
 
-@pytest.fixture
+@pytest.fixture(scope='function')
 def db_session(app):
     """Sesión de base de datos para pruebas"""
     from extensions import db
     return db.session
 
-@pytest.fixture
+@pytest.fixture(scope='function')
 def sample_persona(db_session):
     """Fixture para crear una persona de prueba"""
     from model.persona import Persona
@@ -58,23 +58,23 @@ def sample_persona(db_session):
     db_session.commit()
     return persona
 
-@pytest.fixture
+@pytest.fixture(scope='function')
 def sample_usuario(db_session):
-    """Fixture para crear un usuario de prueba - CORREGIDO"""
+    """Fixture para crear un usuario de prueba"""
     from model.usuario import Usuario
     
     usuario = Usuario(
         nombreUsuario="testuser",
         estatus=1,
-        rol="ADM"  # Ajusta según los roles que uses
+        rol="ADM"
     )
-    usuario.set_password("testpass")  # Usar el método correcto para la contraseña
+    usuario.set_password("testpass")
     
     db_session.add(usuario)
     db_session.commit()
     return usuario
 
-@pytest.fixture
+@pytest.fixture(scope='function')
 def sample_cliente(db_session, sample_persona, sample_usuario):
     """Fixture para crear un cliente de prueba"""
     from model.cliente import Cliente
